@@ -1,30 +1,57 @@
-#include <opencv2/opencv.hpp>
+#include "stereoCam.hpp"
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <iostream>
+#include <stdlib.h>
 
-int main()
-{
-    //initialize and allocate memory to load the video stream from camera
-    cv::VideoCapture camera0(0);
-    cv::VideoCapture camera1(1);
+using namespace cv;
+using namespace std;
 
-    if( !camera0.isOpened() ) return 1;
-    if( !camera1.isOpened() ) return 1;
+Mat inputLeft, inputRight;
 
-    while(true) {
-        //grab and retrieve each frames of the video sequentially
-        cv::Mat3b frame0;
-        camera0 >> frame0;
-        cv::Mat3b frame1;
-        camera1 >> frame1;
+void startCamera(int, int);
+void displayVideo(void);
 
-        cv::imshow("Video0", frame0);
-        cv::imshow("Video1", frame1);
-
-        //wait for 40 milliseconds
-        int c = cvWaitKey(40);
-
-        //exit the loop if user press "Esc" key  (ASCII value of "Esc" is 27)
-        if(27 == char(c)) break;
+void startCamera(int cam1, int cam2) {
+  VideoCapture camLeft(cam1), camRight(cam2);
+  if (!camLeft.isOpened() || !camRight.isOpened()) {
+    cout << "Error: Stereo Cameras not found or there is some problem connecting them. Please check your cameras.\n";
+    exit(-1);
+  }
+  while(true) {
+    camLeft >> inputLeft;
+    camRight >> inputRight;
+    resize(inputLeft, inputLeft, Size(640, 360), 0, 0, INTER_CUBIC);
+    resize(inputRight, inputRight, Size(640, 360), 0, 0, INTER_CUBIC);
+    if ((inputLeft.rows != inputRight.rows) || (inputLeft.cols != inputRight.cols)) {
+      cout << "Error: Images from both cameras are not of some size. Please check the size of each camera.\n";
+      exit(-1);
     }
+    displayVideo();
+    int c = cvWaitKey(40); //wait for 40 milliseconds
+    if(27 == char(c)) break; //exit the loop if user press "Esc" key  (ASCII value of "Esc" is 27)
+  } //while loop
+}
 
-    return 0;
+void displayVideo() {
+  imshow("Left Image", inputLeft);
+  namedWindow("Left Image", 0);
+  //resizeWindow("Left Image", 500,500);
+  imshow("Right Image", inputRight);
+  namedWindow("Right Image", 0);
+  //resizeWindow("Right Image", 500,500);
+}
+
+int main(int argc, char** argv)
+{
+  const String keys =
+    "{cam1|1|Camera 1 Index}"
+    "{cam2|2|Camera 2 Index}";
+  CommandLineParser parser(argc, argv, keys);
+
+  //Start cameras and display video
+  startCamera(parser.get<int>("cam1"), parser.get<int>("cam2"));
+  return 0;
 }
