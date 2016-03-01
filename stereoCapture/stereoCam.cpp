@@ -11,9 +11,23 @@ using namespace std;
 
 const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 360;
+const int MAX_NUM_OBJECTS = 20;
+const int MIN_OBJECT_AREA = 20*20;
+const int MAX_OBJECT_AREA = FRAME_HEIGHT*FRAME_WIDTH/1.5;
+
+int H_MIN = 0;
+int H_MAX = 256;
+int S_MIN = 0;
+int S_MAX = 256;
+int V_MIN = 0;
+int V_MAX = 256;
 
 Mat input1, input2;
 Mat img1R, img2R;
+Mat hsv1, hsv2;
+Mat threshold1, threshold2;
+Mat erodeElement1, erodeElement2;
+Mat dilateElement1, dilateElement2;
 Mat M1, D1, M2, D2, R, T, R1, P1, R2, P2, Q, map11, map12, map21, map22;
 Rect roi1, roi2;
 
@@ -21,8 +35,14 @@ void startCamera(int, int);
 void displayVideo(void);
 int readInCameraParameters(string, string);
 void correctImages(void);
+void morphOps(Mat&);
+void drawObject(int, int, Mat&);
+void trackFilteredObject(int&, int&, Mat, Mat&);
+string intToString(int);
+int calculateLocation(int x1, int x2)
 
 void startCamera(int cam1, int cam2) {
+  int x1=0, x2=0, y1=0, y2=0;
   VideoCapture camLeft(cam1), camRight(cam2);
   if (!camLeft.isOpened() || !camRight.isOpened()) {
     cout << "Error: Stereo Cameras not found or there is some problem connecting them. Please check your cameras.\n";
@@ -38,6 +58,15 @@ void startCamera(int cam1, int cam2) {
       exit(-1);
     }
     correctImages();
+    cvtColor(img1R, hsv1, COLOR_BGR2HSV);
+    cvtColor(img2R, hsv2, COLOR_BGR2HSV);
+    //inRange(HSVImage,Scalar(H_MIN,S_MIN,V_MIN),Scalar(H_MAX,S_MAX,V_MAX),thresholdImage);
+    inRange(hsv1, Scalar(60,92,216), Scalar(71,157,256), threshold1);
+    inRange(hsv2, Scalar(60,92,216), Scalar(71,157,256), threshold2);
+    morphOps(threshold1);
+    morphOps(threshold2);
+    trackFilteredObject(x1, y1, threshold1, img1R);
+    trackFilteredObject(x2, y2, threshold2, img2R);
     displayVideo();
     int c = cvWaitKey(40); //wait for 40 milliseconds
     if(27 == char(c)) {
@@ -45,8 +74,8 @@ void startCamera(int cam1, int cam2) {
       break; //exit the loop if user press "Esc" key  (ASCII value of "Esc" is 27)
     }
     if(32 == char(c)) {
-      imwrite("cam1.png", input1);
-      imwrite("cam2.png", input2);
+      imwrite("cam1.png", img1R);
+      imwrite("cam2.png", img2R);
     }
   } //while loop
 }
@@ -54,6 +83,10 @@ void startCamera(int cam1, int cam2) {
 void displayVideo() {
   imshow("Cam 1 Image", input1);
   imshow("Cam 2 Image", input2);
+  imshow("Cam 1 HSV", hsv1);
+  imshow("Cam 2 HSV", hsv2);
+  imshow("Cam 1 Threshold", threshold1);
+  imshow("Cam 2 Threshold", threshold2);
   imshow("Cam 1 Rectified", img1R);
   imshow("Cam 2 Rectified", img2R);
 }
@@ -94,6 +127,77 @@ void correctImages() {
   initUndistortRectifyMap(M2, D2, R2, P2, img_size, CV_16SC2, map21, map22);
   remap(input1, img1R, map11, map12, INTER_LINEAR);
   remap(input2, img2R, map21, map22, INTER_LINEAR);
+}
+
+void morphOps(Mat &thresh) {
+  Mat erodeElement = getStructuringElement( MORPH_RECT,Size(3,3));
+  Mat dilateElement = getStructuringElement( MORPH_RECT,Size(8,8));
+  erode(thresh,thresh,erodeElement);
+  erode(thresh,thresh,erodeElement);
+  dilate(thresh,thresh,dilateElement);
+  dilate(thresh,thresh,dilateElement);
+}
+
+void drawObject(int x, int y, Mat &frame) {
+  circle(frame,Point(x,y),20,Scalar(0,255,0),2);
+    if(y-25>0)
+    line(frame,Point(x,y),Point(x,y-25),Scalar(0,255,0),2);
+    else line(frame,Point(x,y),Point(x,0),Scalar(0,255,0),2);
+    if(y+25<FRAME_HEIGHT)
+    line(frame,Point(x,y),Point(x,y+25),Scalar(0,255,0),2);
+    else line(frame,Point(x,y),Point(x,FRAME_HEIGHT),Scalar(0,255,0),2);
+    if(x-25>0)
+    line(frame,Point(x,y),Point(x-25,y),Scalar(0,255,0),2);
+    else line(frame,Point(x,y),Point(0,y),Scalar(0,255,0),2);
+    if(x+25<FRAME_WIDTH)
+    line(frame,Point(x,y),Point(x+25,y),Scalar(0,255,0),2);
+    else line(frame,Point(x,y),Point(FRAME_WIDTH,y),Scalar(0,255,0),2);
+
+  putText(frame,intToString(x)+","+intToString(y),Point(x,y+30),1,1,Scalar(0,255,0),2);
+}
+
+void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed){
+  Mat temp;
+  threshold.copyTo(temp);
+  vector< vector<Point> > contours;
+  vector<Vec4i> hierarchy;
+  findContours(temp,contours,hierarchy,CV_RETR_CCOMP,CV_CHAIN_APPROX_SIMPLE );
+  double refArea = 0;
+  bool objectFound = false;
+  if (hierarchy.size() > 0) {
+    int numObjects = hierarchy.size();
+    if(numObjects < 20) {
+      for (int index = 0; index >= 0; index = hierarchy[index][0]) {
+        Moments moment = moments((cv::Mat)contours[index]);
+        double area = moment.m00;
+        if(area>MIN_OBJECT_AREA && area<MAX_OBJECT_AREA && area>refArea) {
+          x = moment.m10/area;
+          y = moment.m01/area;
+          objectFound = true;
+          refArea = area;
+        }
+        else {
+          objectFound = false;
+        }
+      }
+      if(objectFound ==true) {
+        putText(cameraFeed,"Tracking Object",Point(0,50),2,1,Scalar(0,255,0),2);
+        drawObject(x,y,cameraFeed);}
+    }
+    else {
+      putText(cameraFeed,"TOO MUCH NOISE! ADJUST FILTER",Point(0,50),1,2,Scalar(0,0,255),2);
+    }
+  }
+}
+
+string intToString(int number) {
+  stringstream ss;
+  ss << number;
+  return ss.str();
+}
+
+int calculateLocation(int x1, int x2) {
+
 }
 
 int main(int argc, char** argv)

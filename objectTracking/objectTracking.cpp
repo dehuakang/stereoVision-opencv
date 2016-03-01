@@ -87,7 +87,6 @@ void drawObject(int x, int y, Mat &frame) {
 }
 
 void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed){
-
   Mat temp;
   threshold.copyTo(temp);
   vector< vector<Point> > contours;
