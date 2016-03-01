@@ -1,5 +1,9 @@
 # git ignore for c++ project
 
+# Specific files for this project
+*.png
+*.jpg
+
 # Compiled Object files
 *.slo
 *.lo
