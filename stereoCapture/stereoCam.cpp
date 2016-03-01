@@ -34,7 +34,9 @@ void startCamera(int cam1, int cam2) {
     }
     displayVideo();
     int c = cvWaitKey(40); //wait for 40 milliseconds
-    if(27 == char(c)) break; //exit the loop if user press "Esc" key  (ASCII value of "Esc" is 27)
+    if(27 == char(c)) {
+      destroyAllWondows();
+      break; //exit the loop if user press "Esc" key  (ASCII value of "Esc" is 27)
     if(32 == char(c)) {
       imwrite("test_right.png", inputRight);
       imwrite("test_left.png", inputLeft);
