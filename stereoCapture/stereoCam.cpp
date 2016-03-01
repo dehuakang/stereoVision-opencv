@@ -10,6 +10,9 @@ using namespace cv;
 using namespace std;
 
 Mat inputLeft, inputRight;
+Mat cam1map1, cam1map2;
+Mat cam2map1, cam2map2;
+Mat leftStereoUndistorted, rightStereoUndistorted;
 
 void startCamera(int, int);
 void displayVideo(void);
@@ -32,16 +35,18 @@ void startCamera(int cam1, int cam2) {
     displayVideo();
     int c = cvWaitKey(40); //wait for 40 milliseconds
     if(27 == char(c)) break; //exit the loop if user press "Esc" key  (ASCII value of "Esc" is 27)
+    if(32 == char(c)) {
+      imwrite("test_right.png", inputRight);
+      imwrite("test_left.png", inputLeft);
+    }
   } //while loop
 }
 
 void displayVideo() {
   imshow("Left Image", inputLeft);
   namedWindow("Left Image", 0);
-  //resizeWindow("Left Image", 500,500);
   imshow("Right Image", inputRight);
   namedWindow("Right Image", 0);
-  //resizeWindow("Right Image", 500,500);
 }
 
 int main(int argc, char** argv)
