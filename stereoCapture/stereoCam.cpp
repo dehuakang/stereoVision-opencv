@@ -28,8 +28,13 @@ Mat hsv1, hsv2;
 Mat threshold1, threshold2;
 Mat erodeElement1, erodeElement2;
 Mat dilateElement1, dilateElement2;
-Mat M1, D1, M2, D2, R, T, R1, P1, R2, P2, Q, map11, map12, map21, map22;
+Mat M1, D1, M2, D2, R, T, R1, P1, R2, P2, map11, map12, map21, map22;
 Rect roi1, roi2;
+float zero [16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+Mat Q = Mat(4, 4, CV_32F, zero);
+
+float x1=0, x2=0, z1=0, z2=0;
+float X, Y, Z;
 
 void startCamera(int, int);
 void displayVideo(void);
@@ -37,12 +42,11 @@ int readInCameraParameters(string, string);
 void correctImages(void);
 void morphOps(Mat&);
 void drawObject(int, int, Mat&);
-void trackFilteredObject(int&, int&, Mat, Mat&);
+void trackFilteredObject(int, int, Mat, Mat);
 string intToString(int);
-int calculateLocation(int x1, int x2)
+int calculateLocation(float, float, float, float);
 
 void startCamera(int cam1, int cam2) {
-  int x1=0, x2=0, y1=0, y2=0;
   VideoCapture camLeft(cam1), camRight(cam2);
   if (!camLeft.isOpened() || !camRight.isOpened()) {
     cout << "Error: Stereo Cameras not found or there is some problem connecting them. Please check your cameras.\n";
@@ -65,8 +69,9 @@ void startCamera(int cam1, int cam2) {
     inRange(hsv2, Scalar(60,92,216), Scalar(71,157,256), threshold2);
     morphOps(threshold1);
     morphOps(threshold2);
-    trackFilteredObject(x1, y1, threshold1, img1R);
-    trackFilteredObject(x2, y2, threshold2, img2R);
+    trackFilteredObject(x1, z1, threshold1, img1R);
+    trackFilteredObject(x2, z2, threshold2, img2R);
+    calculateLocation(x1, z1, x2, z2);
     displayVideo();
     int c = cvWaitKey(40); //wait for 40 milliseconds
     if(27 == char(c)) {
@@ -153,10 +158,10 @@ void drawObject(int x, int y, Mat &frame) {
     line(frame,Point(x,y),Point(x+25,y),Scalar(0,255,0),2);
     else line(frame,Point(x,y),Point(FRAME_WIDTH,y),Scalar(0,255,0),2);
 
-  putText(frame,intToString(x)+","+intToString(y),Point(x,y+30),1,1,Scalar(0,255,0),2);
+  putText(frame,intToString(Z)+"  ,"+intToString(x)+","+intToString(y),Point(x,y+30),1,1,Scalar(0,255,0),2);
 }
 
-void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed){
+void trackFilteredObject(int x, int y, Mat threshold, Mat cameraFeed){
   Mat temp;
   threshold.copyTo(temp);
   vector< vector<Point> > contours;
@@ -196,8 +201,16 @@ string intToString(int number) {
   return ss.str();
 }
 
-int calculateLocation(int x1, int x2) {
+int calculateLocation(float x1i, float y1i, float x2i, float y2i) {
+  int d = x1i - x2i;
+  float xi = x2i * Q.at<float>(0, 0) + Q.at<float>(0, 3);
+  float yi = y2i * Q.at<float>(1, 1) + Q.at<float>(1, 3);
+  float zi = Q.at<float>(2, 3);
+  float wi = d * Q.at<float>(3, 2) + Q.at<float>(3, 3);
 
+  X = xi / wi;
+  Y = yi / wi;
+  Z = zi / wi;
 }
 
 int main(int argc, char** argv)
